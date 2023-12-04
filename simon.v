@@ -1,7 +1,7 @@
 //top level module
 `timescale 1ns / 1ns
 
-// WORKING WORKING WORKING!!!!!
+//WORKING WORKING WORKING WITH EVERYTHING!!!
 
 module simon(
     input CLOCK_50,
@@ -15,7 +15,7 @@ module simon(
 //KEY[3:0] is for player input
 //LEDR[0] is for led sequenceOver and correctInput
 //HEX0 is for the 5 to 0 counter
-//LEDR[2:5] is for the sequenceDisplay
+//LEDR[3:2] is for the sequenceDisplay
 //HEX1 is for level
 
 wire counterDone, readDone, sequenceOver, yourTurn, gameOver, correct;
@@ -26,6 +26,7 @@ wire [3:0] sequenceSize;
 wire [19:0] sequenceW;
 wire initialEnable, roundEnable, levelEnable, sizeEnable;
 wire counterEnable, readMem, displayEnable, detectEnable, ledEnable, turnEnable, roundReset;
+wire drawReset;
 
 gameLogicFSM g0(
     .resetn(SW[0]),
@@ -56,7 +57,7 @@ gameLogicFSM g0(
     .detectEnable(detectEnable), //checks if input is correct
     .turnEnable(turnEnable),
     .roundReset(roundReset),
-    //.drawReset(LEDR[7]), // resets the screen to black
+    .drawReset(LEDR[7]), // resets the screen to black
     .winScreen(LEDR[8]),
     .loseScreen(LEDR[9]) // for gameover or win screens
 );
@@ -71,18 +72,24 @@ gameDatapath g1(
     .ledEnable(ledEnable),
     .turnEnable(turnEnable),
     .roundReset(roundReset),
-    .readMem(readMem),
 
     .level(level),
     .round(round),
     .sequenceSize(sequenceSize),
-    .sequenceW(sequenceW),
     .sizeDone(sizeDone),
     .levelDone(levelDone),
     .roundDone(roundDone),
     .ledOn(LEDR[0]),
-    .readDone(readDone),
     .yourTurn(yourTurn)
+);
+
+writeSequence w0(
+    .clock(CLOCK_50),
+    .resetn(SW[0]),
+	.level(level),
+    .writeEnable(readMem),
+    .readDone(readDone),
+	.sequenceOut(sequenceW)
 );
 
 sequenceDisplay s0(
@@ -145,7 +152,7 @@ module gameLogicFSM(
     output reg ledEnable, //to light up LED when correct
     output reg detectEnable, //checks if input is correct
     output reg turnEnable, roundReset,
-    //output reg drawReset, // resets the screen to black
+    output reg drawReset, // resets the screen to black
     output reg winScreen, loseScreen // for gameover or win screens
 );
  
@@ -188,7 +195,7 @@ always @(*) begin
         UPDATE: 
             next_state = (sizeDone && levelDone) ? OVER : UPDATE;
         OVER:
-            next_state = (sequenceSize == 10) ? WIN : readSequence;
+            next_state = (sequenceSize == 10) ? WIN : WAIT;
         GAMEOVER:
             next_state = (go) ? START : GAMEOVER;
         WIN:
@@ -198,7 +205,7 @@ always @(*) begin
 end
 
 always @(*) begin
-    //drawReset = 1'b0;
+    drawReset = 1'b0;
     initialEnable = 1'b0;
     titleScreen = 1'b0;
     counterEnable = 1'b0;
@@ -221,10 +228,12 @@ always @(*) begin
         end
         WAIT: begin
             counterEnable = 1'b1;
+            drawReset = 1'b1;
         end
         readSequence: begin
             readMem = 1'b1;
             roundReset = 1'b1;
+            drawReset = 1'b1;
 
         end
         displaySequence: begin
@@ -259,7 +268,7 @@ always @(*) begin
             winScreen = 1'b1;
         end
         default: begin
-            //drawReset = 1'b0;
+            drawReset = 1'b0;
             initialEnable = 1'b0;
             titleScreen = 1'b0;
             counterEnable = 1'b0;
@@ -291,14 +300,13 @@ module gameDatapath(
 input resetn,
 input clock,
 input initialEnable, roundEnable, levelEnable, sizeEnable,
-input ledEnable, turnEnable, roundReset, readMem,
+input ledEnable, turnEnable, roundReset,
 //input drawReset, // needed?
 //input titleScreen, winScreen, loseScreen,
 output reg [2:0] level, // level 1 to 8
 output reg [3:0] round,
 output reg [3:0] sequenceSize,
-output reg [19:0] sequenceW,
-output reg sizeDone, levelDone, roundDone, ledOn, readDone, yourTurn
+output reg sizeDone, levelDone, roundDone, ledOn, yourTurn
 );
 
 wire rateEnable;
@@ -314,9 +322,7 @@ always@(posedge clock) begin
         sizeDone <= 1'b0;
         levelDone <= 1'b0;
         roundDone <= 1'b0;
-        readDone <= 1'b0;
         yourTurn <= 1'b0;
-        sequenceW <= 20'b0;
     end else begin
         if(initialEnable) begin
             level <= 3'b1;
@@ -335,17 +341,12 @@ always@(posedge clock) begin
             levelDone <= 1'b1;
         end if (turnEnable) begin
             yourTurn <= 1'b1;
-        end if (readMem) begin
-            sequenceW <= 20'b01101001101011010110;
-            readDone <= 1'b1;
         end if (roundReset) begin
             round <= 4'b0;
         end if (ledOn && rateEnable) begin
             ledOn <= 1'b0;
         end if (yourTurn && rateEnable) begin
             yourTurn <= 1'b0;
-        end if (readDone && rateEnable) begin
-            readDone <= 1'b0;
         end if (sizeDone && rateEnable) begin
             sizeDone <= 1'b0;
         end if (levelDone && rateEnable) begin
@@ -818,4 +819,156 @@ module sequenceCheck(
             curr_state <= next_state;
         end
     end
+endmodule
+
+module writeSequence(
+    input clock,
+    input resetn,
+	input [2:0] level,
+    input writeEnable,
+    output reg readDone,
+	output wire [19:0] sequenceOut
+    );
+
+    wire [19:0] sequenceW;
+	wire wren;
+	reg wren2;
+	assign wren = wren2;
+	wire generateDone;
+
+	wire [7:0] memAddress;
+    reg [7:0] address;
+
+	always @(*) begin
+        case (level)
+            3'd0: address = 8'd0;
+            3'd1: address = 8'd1;
+            3'd2: address = 8'd2;
+            3'd3: address = 8'd3;
+            3'd4: address = 8'd4;
+            3'd5: address = 8'd5;
+            3'd6: address = 8'd6;
+            3'd7: address = 8'd7;
+            3'd8: address = 8'd8;
+            default: address = 8'd0; 
+        endcase
+    end
+	assign memAddress = address;
+
+	wire rateEnable;
+    rateDivider #(.CLOCK_FREQUENCY(50000000)) r0(.clock(clock), .reset(resetn), .speed(2'b00), .enableDC(rateEnable));
+
+    randomSequence random_inst(.clock(clock), .resetn(resetn), .wren(writeEnable), .generateDone(generateDone), .sequenceW(sequenceW));
+    sequenceMemory s0(.clock(clock), .address(memAddress), .data(sequenceW), .wren(wren), .q(sequenceOut));
+
+    always @(posedge clock) begin
+        if(resetn) begin
+            readDone <= 1'b0;
+        end else if (writeEnable && generateDone) begin
+			wren2 <= 1'b1;
+		end else if(wren2) begin
+			wren2 <= 1'b0;
+			readDone <= 1'b1;
+		end else if (rateEnable && readDone) begin
+			readDone <= 1'b0;
+		end
+    end
+
+endmodule
+
+module randomSequence(
+    input clock, resetn, wren,
+	output reg generateDone,
+    output [19:0] sequenceW
+    );
+
+    reg [19:0] lsfr;
+    wire feedback;
+
+    //lsfr x^20 + x^17 + 1
+    assign feedback = lsfr[20-1] ^ lsfr[17-1];
+
+
+	wire rateEnable;
+    rateDivider #(.CLOCK_FREQUENCY(50000000)) r0(.clock(clock), .reset(resetn), .speed(2'b00), .enableDC(rateEnable));
+
+    always @(posedge clock) begin
+        if(resetn) begin
+            lsfr <= 20'h1234;
+			generateDone <= 1'b0;
+		end else if (wren) begin
+            lsfr <= {lsfr[18:0], feedback};
+			generateDone <= 1'b1;
+		end
+		if(generateDone && rateEnable) begin
+			generateDone <= 1'b0;
+		end
+    end
+
+    assign sequenceW = lsfr;
+endmodule
+
+module sequenceMemory(
+	address,
+	clock,
+	data,
+	wren,
+	q);
+
+	input	[7:0]  address;
+	input	  clock;
+	input	[19:0]  data;
+	input	  wren;
+	output	[19:0]  q;
+`ifndef ALTERA_RESERVED_QIS
+// synopsys translate_off
+`endif
+	tri1	  clock;
+`ifndef ALTERA_RESERVED_QIS
+// synopsys translate_on
+`endif
+
+	wire [19:0] sub_wire0;
+	wire [19:0] q = sub_wire0[19:0];
+
+	altsyncram	altsyncram_component (
+				.address_a (address),
+				.clock0 (clock),
+				.data_a (data),
+				.wren_a (wren),
+				.q_a (sub_wire0),
+				.aclr0 (1'b0),
+				.aclr1 (1'b0),
+				.address_b (1'b1),
+				.addressstall_a (1'b0),
+				.addressstall_b (1'b0),
+				.byteena_a (1'b1),
+				.byteena_b (1'b1),
+				.clock1 (1'b1),
+				.clocken0 (1'b1),
+				.clocken1 (1'b1),
+				.clocken2 (1'b1),
+				.clocken3 (1'b1),
+				.data_b (1'b1),
+				.eccstatus (),
+				.q_b (),
+				.rden_a (1'b1),
+				.rden_b (1'b1),
+				.wren_b (1'b0));
+	defparam
+		altsyncram_component.clock_enable_input_a = "BYPASS",
+		altsyncram_component.clock_enable_output_a = "BYPASS",
+		altsyncram_component.intended_device_family = "Cyclone V",
+		altsyncram_component.lpm_hint = "ENABLE_RUNTIME_MOD=NO",
+		altsyncram_component.lpm_type = "altsyncram",
+		altsyncram_component.numwords_a = 256,
+		altsyncram_component.operation_mode = "SINGLE_PORT",
+		altsyncram_component.outdata_aclr_a = "NONE",
+		altsyncram_component.outdata_reg_a = "UNREGISTERED",
+		altsyncram_component.power_up_uninitialized = "FALSE",
+		altsyncram_component.read_during_write_mode_port_a = "NEW_DATA_NO_NBE_READ",
+		altsyncram_component.widthad_a = 8,
+		altsyncram_component.width_a = 20,
+		altsyncram_component.width_byteena_a = 1;
+
 endmodule
