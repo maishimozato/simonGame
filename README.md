@@ -1,0 +1,2 @@
+An engaging memory game inspired by Simon:
+This project involves a sequence of flashing lights that users need to remember and replicate. The interactive user interface is implemented on the FPGA De1-SoC board, providing a hands-on experience. Players will test their memory skills by mimicking the sequence of lights, creating an entertaining and challenging game that showcases the capabilities of the FPGA technology.
